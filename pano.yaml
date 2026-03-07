@@ -16,5 +16,5 @@ embedding:
   model: nomic-embed-text
 
 mcp:
-  server_name: pano-codebase-rag
+  server_name: pano
   transport: stdio

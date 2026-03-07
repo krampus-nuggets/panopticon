@@ -6,5 +6,5 @@ mcpServers:
     command: uv
     args:
       - run
-      - "E:\\projects\\2026\\panopticon\\main.py"
+      - "your/path/to/main.py"
       - serve
