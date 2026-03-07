@@ -1,0 +1,20 @@
+indexer:
+  sources:
+    - src
+  additional_paths: ["README.md"]
+  extensions: [".py", ".js", ".ts", ".json", ".toml", ".md", ".yaml"]
+  skip_dirs: [".venv", ".git", ".pano", "__pycache__", "node_modules", "codebase-db"]
+  chunk_lines: 60
+  chunk_overlap: 10
+
+database:
+  path: codebase-db
+  table_name: panobase
+
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+
+mcp:
+  server_name: pano-codebase-rag
+  transport: stdio

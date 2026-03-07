@@ -1,0 +1,10 @@
+name: Panopticon
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: pano
+    command: uv
+    args:
+      - run
+      - "E:\\projects\\2026\\panopticon\\main.py"
+      - serve

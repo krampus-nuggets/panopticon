@@ -1,0 +1,20 @@
+name: Local Config
+version: 1.0.0
+schema: v1
+models:
+  - name: Pano - DS Coder V2 Lite (Chat)
+    provider: ollama
+    model: deepseek-coder-v2:lite
+    roles:
+      - chat
+      - edit
+
+  - name: Pano - DS Coder V2 Lite (Autocomplete)
+    provider: ollama
+    model: deepseek-coder-v2:lite
+    roles:
+      - autocomplete
+
+embeddingsProvider:
+  provider: ollama
+  model: nomic-embed-text
