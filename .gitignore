@@ -40,6 +40,7 @@ credentials
 .venv
 codebase-db
 __pycache__
+.pytest_cache
 
 .pnp.*
 .yarn/*
