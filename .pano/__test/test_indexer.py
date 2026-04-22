@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from conftest import MOCK_VECTOR
 from indexer import Indexer
 
 
@@ -140,19 +141,59 @@ class TestChunkFile:
         assert chunks[0]["language"] == "xyz"
 
 
-class TestRun:
-    """End-to-end run with mocked LanceDB."""
+class TestEmbedChunks:
+    """_embed_chunks uses the cache and falls back to ollama."""
 
+    @patch("ollama.embed")
+    def test_cache_miss_calls_ollama(self, mock_embed, sample_config: dict, tmp_path: Path):
+        mock_embed.return_value = {"embeddings": [MOCK_VECTOR]}
+
+        idx = Indexer(sample_config, tmp_path)
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = None
+
+        chunks = [{"text": "hello"}]
+        idx._embed_chunks(chunks, mock_cache)
+
+        mock_embed.assert_called_once()
+        mock_cache.put.assert_called_once_with("hello", MOCK_VECTOR)
+        assert chunks[0]["vector"] == MOCK_VECTOR
+
+    def test_cache_hit_skips_ollama(self, sample_config: dict, tmp_path: Path):
+        idx = Indexer(sample_config, tmp_path)
+        mock_cache = MagicMock()
+        mock_cache.get.return_value = MOCK_VECTOR
+
+        chunks = [{"text": "hello"}]
+        with patch("ollama.embed") as mock_embed:
+            idx._embed_chunks(chunks, mock_cache)
+
+        mock_embed.assert_not_called()
+        assert chunks[0]["vector"] == MOCK_VECTOR
+
+
+class TestRun:
+    """End-to-end run with mocked LanceDB and ollama."""
+
+    @patch("indexer.EmbeddingCache")
     @patch("indexer.lancedb")
-    def test_run_indexes_files(self, mock_lancedb, sample_config: dict, project_tree: Path):
+    @patch("ollama.embed")
+    def test_run_indexes_files(
+        self, mock_embed, mock_lancedb, mock_cache_cls,
+        sample_config: dict, project_tree: Path,
+    ):
+        mock_embed.return_value = {"embeddings": [MOCK_VECTOR] * 20}
+        mock_cache_instance = MagicMock()
+        mock_cache_instance.get.return_value = None
+        mock_cache_cls.return_value = mock_cache_instance
+
         mock_table = MagicMock()
         mock_db = MagicMock()
         mock_db.create_table.return_value = mock_table
         mock_lancedb.connect.return_value = mock_db
 
         idx = Indexer(sample_config, project_tree)
-        with patch.object(idx, "_build_schema", return_value=MagicMock()):
-            idx.run()
+        idx.run()
 
         mock_lancedb.connect.assert_called_once()
         mock_db.create_table.assert_called_once()
@@ -160,6 +201,7 @@ class TestRun:
 
         added_chunks = mock_table.add.call_args[0][0]
         assert len(added_chunks) > 0
+        assert "vector" in added_chunks[0]
 
     @patch("indexer.lancedb")
     def test_run_no_files_prints_warning(
@@ -172,3 +214,76 @@ class TestRun:
         output = capsys.readouterr().out
         assert "No files matched" in output
         mock_lancedb.connect.assert_not_called()
+
+
+class TestReindexFiles:
+    """Selective re-indexing of specific files."""
+
+    @patch("indexer.EmbeddingCache")
+    @patch("indexer.lancedb")
+    @patch("ollama.embed")
+    def test_reindex_deletes_and_inserts(
+        self, mock_embed, mock_lancedb, mock_cache_cls,
+        sample_config: dict, project_tree: Path,
+    ):
+        mock_embed.return_value = {"embeddings": [MOCK_VECTOR]}
+        mock_cache_instance = MagicMock()
+        mock_cache_instance.get.return_value = None
+        mock_cache_cls.return_value = mock_cache_instance
+
+        mock_table = MagicMock()
+        mock_db = MagicMock()
+        mock_db.table_names.return_value = ["code_chunks"]
+        mock_db.open_table.return_value = mock_table
+        mock_lancedb.connect.return_value = mock_db
+
+        idx = Indexer(sample_config, project_tree)
+        idx.reindex_files([project_tree / "src" / "app.py"])
+
+        mock_table.delete.assert_called_once()
+        mock_table.add.assert_called_once()
+
+    @patch("indexer.lancedb")
+    def test_reindex_no_table_prints_warning(
+        self, mock_lancedb, sample_config: dict, project_tree: Path, capsys
+    ):
+        mock_db = MagicMock()
+        mock_db.table_names.return_value = []
+        mock_lancedb.connect.return_value = mock_db
+
+        idx = Indexer(sample_config, project_tree)
+        idx.reindex_files([project_tree / "src" / "app.py"])
+
+        assert "Run a full index first" in capsys.readouterr().out
+
+
+class TestRemoveFiles:
+    """Removing chunks for deleted files."""
+
+    @patch("indexer.lancedb")
+    def test_remove_deletes_from_table(
+        self, mock_lancedb, sample_config: dict, project_tree: Path
+    ):
+        mock_table = MagicMock()
+        mock_db = MagicMock()
+        mock_db.table_names.return_value = ["code_chunks"]
+        mock_db.open_table.return_value = mock_table
+        mock_lancedb.connect.return_value = mock_db
+
+        idx = Indexer(sample_config, project_tree)
+        idx.remove_files([project_tree / "src" / "app.py"])
+
+        mock_table.delete.assert_called_once()
+
+    @patch("indexer.lancedb")
+    def test_remove_no_table_does_nothing(
+        self, mock_lancedb, sample_config: dict, project_tree: Path
+    ):
+        mock_db = MagicMock()
+        mock_db.table_names.return_value = []
+        mock_lancedb.connect.return_value = mock_db
+
+        idx = Indexer(sample_config, project_tree)
+        idx.remove_files([project_tree / "src" / "app.py"])
+
+        mock_db.open_table.assert_not_called()

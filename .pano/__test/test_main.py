@@ -78,20 +78,54 @@ class TestIndexCommand:
 
 
 class TestServeCommand:
-    """CLI 'serve' command starts the MCP server."""
+    """CLI 'serve' command starts the MCP server with background watcher."""
 
-    def test_serve_runs(self, config_yaml_file: Path):
+    @patch("watcher.Watcher")
+    @patch("mcp_server.create_server")
+    def test_serve_runs_with_watcher(
+        self, mock_create, mock_watcher_cls, config_yaml_file: Path
+    ):
         mock_server = MagicMock()
+        mock_create.return_value = mock_server
+        mock_watcher_instance = MagicMock()
+        mock_watcher_cls.return_value = mock_watcher_instance
 
-        with patch("mcp_server.create_server", return_value=mock_server) as mock_create:
+        with patch("main.threading.Thread") as mock_thread:
+            mock_thread_instance = MagicMock()
+            mock_thread.return_value = mock_thread_instance
+
             result = runner.invoke(app, ["serve", "--config", str(config_yaml_file)])
 
         assert result.exit_code == 0
+        mock_thread.assert_called_once_with(
+            target=mock_watcher_instance.run, daemon=True
+        )
+        mock_thread_instance.start.assert_called_once()
         mock_create.assert_called_once()
         mock_server.run.assert_called_once_with(transport="stdio")
 
     def test_serve_missing_config_fails(self, tmp_path: Path):
         result = runner.invoke(app, ["serve", "--config", str(tmp_path / "nope.yaml")])
+
+        assert result.exit_code != 0
+
+
+class TestWatchCommand:
+    """CLI 'watch' command starts the standalone file watcher."""
+
+    @patch("watcher.Watcher")
+    def test_watch_runs(self, mock_watcher_cls, config_yaml_file: Path):
+        mock_watcher_instance = MagicMock()
+        mock_watcher_cls.return_value = mock_watcher_instance
+
+        result = runner.invoke(app, ["watch", "--config", str(config_yaml_file)])
+
+        assert result.exit_code == 0
+        mock_watcher_cls.assert_called_once()
+        mock_watcher_instance.run.assert_called_once()
+
+    def test_watch_missing_config_fails(self, tmp_path: Path):
+        result = runner.invoke(app, ["watch", "--config", str(tmp_path / "nope.yaml")])
 
         assert result.exit_code != 0
 
@@ -105,6 +139,7 @@ class TestHelpOutput:
         assert result.exit_code == 0
         assert "index" in result.output
         assert "serve" in result.output
+        assert "watch" in result.output
 
     def test_index_help(self):
         result = runner.invoke(app, ["index", "--help"])
@@ -114,6 +149,12 @@ class TestHelpOutput:
 
     def test_serve_help(self):
         result = runner.invoke(app, ["serve", "--help"])
+
+        assert result.exit_code == 0
+        assert "--config" in result.output
+
+    def test_watch_help(self):
+        result = runner.invoke(app, ["watch", "--help"])
 
         assert result.exit_code == 0
         assert "--config" in result.output

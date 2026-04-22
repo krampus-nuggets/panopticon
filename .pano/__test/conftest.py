@@ -8,6 +8,9 @@ if str(PANO_DIR) not in sys.path:
     sys.path.insert(0, str(PANO_DIR))
 
 
+MOCK_VECTOR = [0.1] * 768
+
+
 @pytest.fixture()
 def sample_config() -> dict:
     """Minimal valid pano.yaml config as a dict."""
@@ -27,6 +30,9 @@ def sample_config() -> dict:
         "embedding": {
             "provider": "ollama",
             "model": "nomic-embed-text",
+        },
+        "watcher": {
+            "debounce_ms": 2000,
         },
         "mcp": {
             "server_name": "pano-test",

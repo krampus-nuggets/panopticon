@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+from conftest import MOCK_VECTOR
 from mcp_server import create_server
 
 
@@ -38,16 +39,26 @@ def mock_table():
     return table
 
 
+def _get_tool_fn(server, name: str):
+    """Extract a tool function by name from a FastMCP server."""
+    for tool in server._tool_manager.list_tools():
+        if tool.name == name:
+            return tool.fn
+    return None
+
+
 class TestCreateServer:
     """Factory builds a properly configured FastMCP instance."""
 
-    def test_returns_fastmcp(self, sample_config: dict, tmp_path: Path):
+    @patch("mcp_server.lancedb")
+    def test_returns_fastmcp(self, mock_lancedb, sample_config: dict, tmp_path: Path):
         server = create_server(sample_config, tmp_path)
 
         from mcp.server.fastmcp import FastMCP
         assert isinstance(server, FastMCP)
 
-    def test_server_name_from_config(self, sample_config: dict, tmp_path: Path):
+    @patch("mcp_server.lancedb")
+    def test_server_name_from_config(self, mock_lancedb, sample_config: dict, tmp_path: Path):
         sample_config["mcp"]["server_name"] = "custom-name"
         server = create_server(sample_config, tmp_path)
 
@@ -57,40 +68,37 @@ class TestCreateServer:
 class TestSearchCodebase:
     """search_codebase tool returns formatted results."""
 
+    @patch("mcp_server.ollama")
     @patch("mcp_server.lancedb")
     def test_returns_formatted_results(
-        self, mock_lancedb, sample_config: dict, tmp_path: Path, mock_table
+        self, mock_lancedb, mock_ollama, sample_config: dict, tmp_path: Path, mock_table
     ):
         mock_lancedb.connect.return_value.open_table.return_value = mock_table
+        mock_ollama.embed.return_value = {"embeddings": [MOCK_VECTOR]}
 
         server = create_server(sample_config, tmp_path)
-        tool_fn = None
-        for tool in server._tool_manager.list_tools():
-            if tool.name == "search_codebase":
-                tool_fn = tool.fn
-                break
+        tool_fn = _get_tool_fn(server, "search_codebase")
 
         assert tool_fn is not None
         result = tool_fn("hello", limit=5)
 
         assert "src/app.py" in result
         assert "python" in result
+        mock_ollama.embed.assert_called_once()
 
+    @patch("mcp_server.ollama")
     @patch("mcp_server.lancedb")
-    def test_empty_results(self, mock_lancedb, sample_config: dict, tmp_path: Path):
+    def test_empty_results(self, mock_lancedb, mock_ollama, sample_config: dict, tmp_path: Path):
         empty_table = MagicMock()
         search_result = MagicMock()
         search_result.limit.return_value = search_result
         search_result.to_list.return_value = []
         empty_table.search.return_value = search_result
         mock_lancedb.connect.return_value.open_table.return_value = empty_table
+        mock_ollama.embed.return_value = {"embeddings": [MOCK_VECTOR]}
 
         server = create_server(sample_config, tmp_path)
-        tool_fn = None
-        for tool in server._tool_manager.list_tools():
-            if tool.name == "search_codebase":
-                tool_fn = tool.fn
-                break
+        tool_fn = _get_tool_fn(server, "search_codebase")
 
         result = tool_fn("nothing", limit=5)
         assert result == "No results found."
@@ -106,11 +114,7 @@ class TestGetFileContext:
         mock_lancedb.connect.return_value.open_table.return_value = mock_table
 
         server = create_server(sample_config, tmp_path)
-        tool_fn = None
-        for tool in server._tool_manager.list_tools():
-            if tool.name == "get_file_context":
-                tool_fn = tool.fn
-                break
+        tool_fn = _get_tool_fn(server, "get_file_context")
 
         assert tool_fn is not None
         result = tool_fn("src/app.py")
@@ -126,11 +130,7 @@ class TestGetFileContext:
         mock_lancedb.connect.return_value.open_table.return_value = empty_table
 
         server = create_server(sample_config, tmp_path)
-        tool_fn = None
-        for tool in server._tool_manager.list_tools():
-            if tool.name == "get_file_context":
-                tool_fn = tool.fn
-                break
+        tool_fn = _get_tool_fn(server, "get_file_context")
 
         result = tool_fn("nonexistent.py")
         assert "No indexed chunks found" in result
@@ -146,11 +146,7 @@ class TestListIndexedFiles:
         mock_lancedb.connect.return_value.open_table.return_value = mock_table
 
         server = create_server(sample_config, tmp_path)
-        tool_fn = None
-        for tool in server._tool_manager.list_tools():
-            if tool.name == "list_indexed_files":
-                tool_fn = tool.fn
-                break
+        tool_fn = _get_tool_fn(server, "list_indexed_files")
 
         assert tool_fn is not None
         result = tool_fn()
@@ -166,11 +162,7 @@ class TestListIndexedFiles:
         mock_lancedb.connect.return_value.open_table.return_value = empty_table
 
         server = create_server(sample_config, tmp_path)
-        tool_fn = None
-        for tool in server._tool_manager.list_tools():
-            if tool.name == "list_indexed_files":
-                tool_fn = tool.fn
-                break
+        tool_fn = _get_tool_fn(server, "list_indexed_files")
 
         result = tool_fn()
         assert result == "No files indexed."
