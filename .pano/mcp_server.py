@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import lancedb
+import ollama
 from mcp.server.fastmcp import FastMCP
 
 
@@ -12,14 +13,16 @@ def create_server(config: dict, project_root: Path) -> FastMCP:
     db_path = str(project_root / db_cfg.get("path", "codebase-db"))
     table_name = db_cfg.get("table_name", "code_chunks")
 
+    emb_cfg = config.get("embedding", {})
+    embedding_model = emb_cfg.get("model", "nomic-embed-text")
+
     mcp_cfg = config.get("mcp", {})
     server_name = mcp_cfg.get("server_name", "pano-codebase-rag")
 
     mcp = FastMCP(server_name)
 
-    def _open_table():
-        db = lancedb.connect(db_path)
-        return db.open_table(table_name)
+    db = lancedb.connect(db_path)
+    table = db.open_table(table_name)
 
     @mcp.tool()
     def search_codebase(query: str, limit: int = 5) -> str:
@@ -29,8 +32,9 @@ def create_server(config: dict, project_root: Path) -> FastMCP:
             query: Natural language or code search query.
             limit: Maximum number of chunks to return.
         """
-        table = _open_table()
-        results = table.search(query).limit(limit).to_list()
+        response = ollama.embed(model=embedding_model, input=[query])
+        vector = response["embeddings"][0]
+        results = table.search(vector).limit(limit).to_list()
 
         if not results:
             return "No results found."
@@ -51,7 +55,6 @@ def create_server(config: dict, project_root: Path) -> FastMCP:
         Args:
             filename: File path relative to the project root (e.g. "src/main.py").
         """
-        table = _open_table()
         df = table.to_pandas()
         file_chunks = df[df["filename"] == filename].sort_values("start_line")
 
@@ -67,7 +70,6 @@ def create_server(config: dict, project_root: Path) -> FastMCP:
     @mcp.tool()
     def list_indexed_files() -> str:
         """List all files that have been indexed in the codebase database."""
-        table = _open_table()
         df = table.to_pandas()
         files = sorted(df["filename"].unique())
 

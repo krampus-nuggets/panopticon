@@ -1,4 +1,5 @@
 import sys
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -44,13 +45,35 @@ def index(
 def serve(
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to pano.yaml config file."),
 ) -> None:
-    """Start the MCP server for codebase RAG queries."""
+    """Start the MCP server for codebase RAG queries with live re-indexing."""
+    from indexer import Indexer
     from mcp_server import create_server
+    from watcher import Watcher
 
     cfg = load_config(config)
+
+    indexer = Indexer(cfg, PROJECT_ROOT)
+    file_watcher = Watcher(indexer, cfg, PROJECT_ROOT)
+    watcher_thread = threading.Thread(target=file_watcher.run, daemon=True)
+    watcher_thread.start()
+
     transport = cfg.get("mcp", {}).get("transport", "stdio")
     server = create_server(cfg, PROJECT_ROOT)
     server.run(transport=transport)
+
+
+@app.command()
+def watch(
+    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to pano.yaml config file."),
+) -> None:
+    """Watch the codebase for changes and re-index automatically."""
+    from indexer import Indexer
+    from watcher import Watcher
+
+    cfg = load_config(config)
+    indexer = Indexer(cfg, PROJECT_ROOT)
+    file_watcher = Watcher(indexer, cfg, PROJECT_ROOT)
+    file_watcher.run()
 
 
 if __name__ == "__main__":
