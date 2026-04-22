@@ -15,6 +15,9 @@ embedding:
   provider: ollama
   model: nomic-embed-text
 
+watcher:
+  debounce_ms: 2000
+
 mcp:
   server_name: pano
   transport: stdio

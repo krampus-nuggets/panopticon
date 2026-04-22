@@ -28,6 +28,7 @@ This project is a modular bricolage, purposefully integrating existing tools to 
 * [Python](https://www.python.org)
 * [LanceDB](https://docs.lancedb.com)
 * [Continue Extension](https://www.continue.dev)
+* [Watchfiles](https://watchfiles.helpmanual.io) (File system watcher for live re-indexing)
 * [Nomic Embed Text](https://ollama.com/library/nomic-embed-text:latest) (Any viable embeddings model)
 * [DeepSeek Coder V2 Lite](https://ollama.com/library/deepseek-coder-v2:lite) (Any viable language model/s)
 * [Visual Studio Code](https://code.visualstudio.com) / [Cursor](https://cursor.com/home) (Any branch of VSC should work)
@@ -53,7 +54,9 @@ This project is a modular bricolage, purposefully integrating existing tools to 
 
 **2.5 Index the codebase -** ```uv run main.py index```
 
-**2.6 You should now be able to see your MCP Server and Query your codebase:** (see below)
+**2.6 The ```serve``` command now automatically watches for file changes and keeps the index live. To watch for changes without running the MCP server -** ```uv run main.py watch```
+
+**2.7 You should now be able to see your MCP Server and Query your codebase:** (see below)
 
 <table>
     <tr>
@@ -80,6 +83,6 @@ This project is a modular bricolage, purposefully integrating existing tools to 
 
 ## 3. In-Progress Features
 
-🟧 Switch to a file-change based indexing strategy <br>
+🟩 File-change based indexing via `watchfiles` with embedding KV cache <br>
 🟧 Improve usability to allow drop-in setup for any project <br>
 🟧 Evaluate other models for performance & usability *(for example - `qwen3-embedding:0.6b` with `qwen3.5:9b`)* <br>
